@@ -1,0 +1,2 @@
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+export async function api(path, options = {}) { const token = localStorage.getItem('tv-token'); const response = await fetch(`${BASE_URL}${path}`, { headers: { ...(options.body instanceof FormData ? {} : {'Content-Type':'application/json'}), ...(token ? {Authorization:`Bearer ${token}`} : {}), ...options.headers }, ...options }); if (!response.ok) throw new Error((await response.json().catch(()=>({}))).message || 'Something went wrong.'); return response.status === 204 ? null : response.json(); }

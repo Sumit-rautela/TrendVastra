@@ -1,0 +1,1 @@
+import { api } from './api'; export const productApi = { list: q => api(`/api/products?${new URLSearchParams(q)}`), one:id => api(`/api/products/${id}`), recommendations: () => api('/api/products/recommendations') };
