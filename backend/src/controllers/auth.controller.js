@@ -37,6 +37,7 @@ export async function register(req, res) {
     const token = jwt.sign(
       {
         id: userId,
+        role: "user",
       },
       process.env.JWT_SECRET,
       {
@@ -57,6 +58,7 @@ export async function register(req, res) {
         id: userId,
         name: name,
         email: email,
+        role: "user",
       },
     });
   } catch (error) {
@@ -89,6 +91,7 @@ export async function login(req, res) {
         message: "Invalid Email or Password",
       });
     }
+
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
 
     if (!isPasswordValid) {
@@ -100,6 +103,7 @@ export async function login(req, res) {
     const token = jwt.sign(
       {
         id: user.id,
+        role: user.role,
       },
       process.env.JWT_SECRET,
       {
@@ -119,7 +123,8 @@ export async function login(req, res) {
       user: {
         id: user.id,
         email: user.email,
-        username: user.username,
+        name: user.name,
+        role: user.role,
       },
     });
   } catch (error) {
@@ -159,7 +164,7 @@ export async function getMe(req, res) {
       [userId]
     );
 
-    const user = rows;
+    const user = rows[0];
 
     if (!user) {
       return res.status(404).json({
@@ -170,10 +175,30 @@ export async function getMe(req, res) {
     res.status(200).json({
       message: "User detail fetch successfully",
       user: {
-        id: user._id,
-        username: user.username,
+        id: user.id,
+        name: user.name,
         email: user.email,
+        role: user.role,
       },
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: error.message,
+    });
+  }
+}
+
+//get Users
+export async function getAllUsers(req, res) {
+  try {
+    const [users] = await db.execute(
+      "SELECT id,name,email,phone,role created_at From users ORDER BY created_at DESC"
+    );
+
+    return res.status(200).json({
+      message: "Users fetched Successfully",
+      count: users.length,
+      users,
     });
   } catch (error) {
     res.status(500).json({
