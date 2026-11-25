@@ -60,9 +60,11 @@ export async function getProductById(req, res) {
   }
 }
 
-//Create Product by Admin
+// Create Product by Admin
 export async function createProduct(req, res) {
   let uploadedImages = [];
+  let connection;
+  let transactionStarted = false;
 
   try {
     const {
@@ -122,9 +124,12 @@ export async function createProduct(req, res) {
       files.map((file) => uploadToCloudinary(file.buffer))
     );
 
-    await db.beginTransaction();
+    connection = await db.getConnection();
 
-    const [result] = await db.execute(
+    await connection.beginTransaction();
+    transactionStarted = true;
+
+    const [result] = await connection.execute(
       `INSERT INTO products
        (category_id, name, description, price, stock_quantity, gender, color, style)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -143,8 +148,10 @@ export async function createProduct(req, res) {
     const productId = result.insertId;
 
     for (let i = 0; i < uploadedImages.length; i++) {
-      await db.execute(
-        "INSERT INTO product_images (product_id, image_url, public_id, is_primary) VALUES (?, ?, ?, ?)",
+      await connection.execute(
+        `INSERT INTO product_images
+         (product_id, image_url, public_id, is_primary)
+         VALUES (?, ?, ?, ?)`,
         [
           productId,
           uploadedImages[i].secure_url,
@@ -154,7 +161,8 @@ export async function createProduct(req, res) {
       );
     }
 
-    await db.commit();
+    await connection.commit();
+    transactionStarted = false;
 
     let product = null;
 
@@ -183,7 +191,9 @@ export async function createProduct(req, res) {
       product,
     });
   } catch (error) {
-    await db.rollback();
+    if (transactionStarted) {
+      await connection.rollback();
+    }
 
     await Promise.all(
       uploadedImages.map((img) =>
@@ -192,12 +202,17 @@ export async function createProduct(req, res) {
     );
 
     return res.status(500).json({ message: error.message });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 }
 
 // Update product by Admin
 export async function updateProduct(req, res) {
   const uploadedImages = [];
+  let connection;
   let transactionStarted = false;
 
   try {
@@ -270,10 +285,12 @@ export async function updateProduct(req, res) {
       }
     }
 
-    await db.beginTransaction();
+    connection = await db.getConnection();
+
+    await connection.beginTransaction();
     transactionStarted = true;
 
-    await db.execute(
+    await connection.execute(
       `UPDATE products
        SET category_id = ?, name = ?, description = ?, price = ?,
            stock_quantity = ?, gender = ?, color = ?, style = ?,
@@ -293,12 +310,15 @@ export async function updateProduct(req, res) {
     );
 
     if (files.length > 0) {
-      await db.execute("DELETE FROM product_images WHERE product_id = ?", [id]);
+      await connection.execute(
+        "DELETE FROM product_images WHERE product_id = ?",
+        [id]
+      );
 
       const primaryIndex = Number(primary_image_index) || 0;
 
       for (let i = 0; i < newImages.length; i++) {
-        await db.execute(
+        await connection.execute(
           `INSERT INTO product_images
            (product_id, image_url, public_id, is_primary)
            VALUES (?, ?, ?, ?)`,
@@ -312,7 +332,7 @@ export async function updateProduct(req, res) {
       }
     }
 
-    await db.commit();
+    await connection.commit();
     transactionStarted = false;
 
     for (const img of oldImages) {
@@ -326,7 +346,7 @@ export async function updateProduct(req, res) {
     });
   } catch (error) {
     if (transactionStarted) {
-      await db.rollback();
+      await connection.rollback();
     }
 
     for (const publicId of uploadedImages) {
@@ -334,11 +354,16 @@ export async function updateProduct(req, res) {
     }
 
     return res.status(500).json({ message: error.message });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 }
 
 // Delete product by Admin
 export async function deleteProduct(req, res) {
+  let connection;
   let transactionStarted = false;
 
   try {
@@ -360,14 +385,19 @@ export async function deleteProduct(req, res) {
     );
 
     // 3. Delete from the database
-    await db.beginTransaction();
+    connection = await db.getConnection();
+
+    await connection.beginTransaction();
     transactionStarted = true;
 
-    await db.execute("DELETE FROM product_images WHERE product_id = ?", [id]);
+    await connection.execute(
+      "DELETE FROM product_images WHERE product_id = ?",
+      [id]
+    );
 
-    await db.execute("DELETE FROM products WHERE id = ?", [id]);
+    await connection.execute("DELETE FROM products WHERE id = ?", [id]);
 
-    await db.commit();
+    await connection.commit();
     transactionStarted = false;
 
     // 4. Delete images from Cloudinary
@@ -382,7 +412,7 @@ export async function deleteProduct(req, res) {
     });
   } catch (error) {
     if (transactionStarted) {
-      await db.rollback();
+      await connection.rollback();
     }
 
     // Product is used in orders
@@ -395,5 +425,9 @@ export async function deleteProduct(req, res) {
     return res.status(500).json({
       message: "Failed to delete product",
     });
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 }
