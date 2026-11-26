@@ -20,7 +20,7 @@ authRouter.post("/login", login);
 authRouter.get("/logout", logout);
 
 //Get current logged in user
-authRouter.get("/get-me", getMe);
+authRouter.get("/get-me", verifyToken, getMe);
 
 //Get All Users
 authRouter.get("/users", verifyToken, isAdmin, getAllUsers);
